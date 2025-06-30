@@ -1,0 +1,344 @@
+# .gitignore - Streamlit 프로젝트용 Git 무시 파일
+
+# ================================
+# Streamlit 관련 파일 (중요!)
+# ================================
+
+# API 키 등 비밀 정보 (절대 업로드 금지!)
+.streamlit/secrets.toml
+secrets.toml
+
+# 환경변수 파일
+.env
+.env.local
+.env.production
+.env.staging
+
+# ================================
+# Python 관련 파일
+# ================================
+
+# 바이트코드 캐시
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 배포 파일
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# 가상환경
+venv/
+env/
+ENV/
+.venv/
+.ENV/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pytest 캐시
+.pytest_cache/
+.coverage
+htmlcov/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ================================
+# 에디터 및 IDE 파일
+# ================================
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ================================
+# 운영체제 파일
+# ================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ================================
+# 로그 및 임시 파일
+# ================================
+
+# 로그 파일
+*.log
+*.out
+*.err
+logs/
+
+# 임시 파일
+*.tmp
+*.temp
+temp/
+tmp/
+
+# 백업 파일
+*.bak
+*.backup
+*.orig
+
+# ================================
+# 데이터 파일 (선택적)
+# ================================
+
+# 대용량 데이터 파일
+*.csv
+*.xlsx
+*.json
+*.xml
+data/
+datasets/
+
+# 단, 샘플 데이터는 포함
+!sample_data/
+!*_sample.csv
+!demo_data.json
+
+# ================================
+# 미디어 파일
+# ================================
+
+# 이미지 (프로젝트에 필요한 것은 제외)
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.svg
+*.ico
+
+# 단, 로고나 아이콘은 포함
+!logo.*
+!icon.*
+!favicon.*
+
+# 동영상 및 오디오
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.mp3
+*.wav
+
+# ================================
+# 패키지 관리자 파일
+# ================================
+
+# pip
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Poetry
+poetry.lock
+
+# Pipenv
+Pipfile.lock
+
+# ================================
+# 클라우드 및 배포 관련
+# ================================
+
+# Heroku
+.env.production
+
+# Vercel
+.vercel
+
+# Netlify
+.netlify
+
+# Docker
+Dockerfile.prod
+docker-compose.prod.yml
+
+# ================================
+# 테스트 및 커버리지
+# ================================
+
+# 테스트 결과
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# ================================
+# 문서화
+# ================================
+
+# Sphinx 문서
+docs/_build/
+.readthedocs.yml
+
+# ================================
+# 보안 및 인증서
+# ================================
+
+# SSL 인증서
+*.pem
+*.key
+*.crt
+*.csr
+
+# SSH 키
+id_rsa
+id_rsa.pub
+known_hosts
+
+# ================================
+# 프로젝트 특화 파일
+# ================================
+
+# API 응답 캐시
+cache/
+.cache/
+
+# 사용자 업로드 파일
+uploads/
+user_data/
+
+# 설정 파일 백업
+config_backup/
+*.config.bak
+
+# 개발용 스크립트
+dev_scripts/
+test_scripts/
+
+# ================================
+# Streamlit 특화 무시 파일
+# ================================
+
+# Streamlit 캐시
+.streamlit/cache/
+
+# 사용자 세션 데이터
+.streamlit/sessions/
+
+# 앱 상태 저장 파일
+app_state.pkl
+session_state.json
+
+# ================================
+# 주의사항
+# ================================
+
+# 1. secrets.toml 파일은 절대 Git에 올리지 마세요!
+#    API 키가 노출되면 보안 위험이 있습니다.
+
+# 2. .env 파일도 마찬가지로 비밀 정보를 포함하므로 제외합니다.
+
+# 3. 필요한 파일이 무시되고 있다면 강제로 추가할 수 있습니다:
+#    git add -f filename
+
+# 4. 이미 Git에 추가된 파일을 무시하려면:
+#    git rm --cached filename
+
+# ================================
+# 예시: 포함되어야 할 중요한 파일들
+# ================================
+
+# 반드시 포함되어야 하는 파일들:
+# streamlit_app.py
+# requirements.txt
+# .streamlit/config.toml
+# README.md
+# .gitignore (이 파일)
+
+# 선택적으로 포함할 파일들:
+# assets/ (이미지, 아이콘 등)
+# utils/ (유틸리티 함수들)
+# components/ (커스텀 컴포넌트)

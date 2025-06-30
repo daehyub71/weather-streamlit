@@ -1,0 +1,160 @@
+# .streamlit/config.toml - Streamlit 설정 파일
+
+[global]
+# 개발 모드 설정 (배포시 자동으로 False)
+developmentMode = false
+
+# 사용량 통계 수집 (선택사항)
+gatherUsageStats = false
+
+# 로그 레벨 설정
+logLevel = "info"
+
+[server]
+# 포트 설정 (Streamlit Cloud에서는 자동 설정)
+port = 8501
+
+# 헤드리스 모드 (서버 환경용)
+headless = true
+
+# 파일 업로드 크기 제한 (MB)
+maxUploadSize = 200
+
+# 메시지 크기 제한 (MB)
+maxMessageSize = 200
+
+# CORS 설정 (모든 도메인 허용)
+enableCORS = false
+
+# XSS 보호 활성화
+enableXsrfProtection = true
+
+[browser]
+# 자동으로 브라우저 열기 (로컬 개발시에만)
+gatherUsageStats = false
+
+# 서버 주소 (Streamlit Cloud에서는 자동 설정)
+serverAddress = "localhost"
+
+[theme]
+# 기본 테마 설정 (light/dark)
+base = "light"
+
+# 기본 색상 (선택사항 - 주석 해제하여 커스터마이징)
+# primaryColor = "#667eea"
+# backgroundColor = "#ffffff"
+# secondaryBackgroundColor = "#f0f2f6"
+# textColor = "#262730"
+
+[client]
+# 툴바 모드 (minimal/developer/viewer)
+toolbarMode = "minimal"
+
+# 사이드바 초기 상태 (auto/expanded/collapsed)
+showSidebarNavigation = true
+
+[runner]
+# 매직 명령어 활성화
+magicEnabled = true
+
+# 파일 변경시 자동 재실행 (개발 모드)
+fastReruns = true
+
+# 실행 결과 캐싱
+enforceSerializableSessionState = false
+
+[logger]
+# 로그 레벨
+level = "info"
+
+# 메시지 형식
+messageFormat = "%(asctime)s.%(msecs)03d %(name)s: %(levelname)s: %(message)s"
+
+[deprecation]
+# 경고 메시지 표시
+showPyplotGlobalUse = false
+
+[mapbox]
+# Mapbox 토큰 (지도 기능 사용시)
+# token = "your_mapbox_token_here"
+
+[s3]
+# AWS S3 연동 (파일 업로드용)
+# bucket = "your_s3_bucket"
+# region = "us-east-1"
+# accessKeyId = "your_access_key"
+# secretAccessKey = "your_secret_key"
+
+# ================================
+# 모바일 최적화 설정
+# ================================
+
+[ui]
+# 모바일에서 사이드바 숨기기
+hideTopBar = false
+
+# 푸터 숨기기
+hideMainMenuButton = false
+
+# "Made with Streamlit" 링크 숨기기 (Streamlit Cloud에서는 제한적)
+hideSidebarNav = false
+
+# ================================
+# 성능 최적화 설정
+# ================================
+
+[global.dataFrameSerialization]
+# DataFrame 직렬화 방식 ("legacy" 또는 "arrow")
+engine = "arrow"
+
+[global.unitTest]
+# 단위 테스트 모드
+displayMode = "primary"
+
+# ================================
+# 캐싱 설정
+# ================================
+
+[global.dataFrameSerialization]
+# 데이터프레임 직렬화 엔진
+engine = "arrow"
+
+[global.storeCacheDiskPersistence]
+# 캐시 디스크 저장 (Streamlit Cloud에서는 제한적)
+enabled = false
+
+# ================================
+# 보안 설정
+# ================================
+
+[server.fileWatcherType]
+# 파일 감시 방식 ("auto", "poll", "watchdog")
+type = "auto"
+
+[server.cookieSecret]
+# 쿠키 암호화 시크릿 (자동 생성됨)
+# secret = "your_cookie_secret_here"
+
+# ================================
+# 개발 편의 설정
+# ================================
+
+[global.showWarningOnDirectExecution]
+# 직접 실행시 경고 표시
+enabled = true
+
+[global.suppressDeprecationWarnings]
+# 지원 중단 경고 숨기기
+enabled = false
+
+# ================================
+# 실험적 기능
+# ================================
+
+[global.experimentalRerun]
+# 실험적 재실행 기능
+enabled = false
+
+[global.experimentalSingleton]
+# 실험적 싱글톤 기능
+enabled = false
