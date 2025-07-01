@@ -1,4 +1,4 @@
-# streamlit_app.py - 도시별 시간 표시 개선 버전
+# streamlit_app.py - 스마트 출퇴근 도우미 Streamlit 모바일 버전
 
 import streamlit as st
 import requests
@@ -7,7 +7,9 @@ import datetime
 import time
 from typing import Dict, List, Optional
 from dataclasses import dataclass
-import pytz
+import plotly.express as px
+import plotly.graph_objects as go
+import pandas as pd
 
 # 페이지 설정 - 모바일 최적화
 st.set_page_config(
@@ -20,6 +22,7 @@ st.set_page_config(
 # 모바일 친화적 CSS 스타일
 st.markdown("""
 <style>
+    /* 모바일 최적화 스타일 */
     .main > div {
         padding-top: 2rem;
     }
@@ -49,26 +52,62 @@ st.markdown("""
         border-radius: 0.25rem;
     }
     
-    .time-display {
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 0.5rem;
-        padding: 1rem;
-        margin: 1rem 0;
+    .big-emoji {
+        font-size: 3rem;
         text-align: center;
     }
     
-    .data-source {
-        font-size: 0.9rem;
-        opacity: 0.8;
-        margin-top: 1rem;
-        text-align: center;
+    .temperature {
+        font-size: 3rem;
+        font-weight: bold;
+        margin: 0.5rem 0;
     }
     
+    .status-good {
+        color: #28a745;
+        font-weight: bold;
+    }
+    
+    .status-warning {
+        color: #ffc107;
+        font-weight: bold;
+    }
+    
+    .status-danger {
+        color: #dc3545;
+        font-weight: bold;
+    }
+    
+    /* 모바일에서 버튼 크기 조정 */
     .stButton > button {
         width: 100%;
         height: 3rem;
         font-size: 1.1rem;
         font-weight: bold;
+    }
+    
+    /* 선택박스 모바일 최적화 */
+    .stSelectbox > div > div {
+        font-size: 1.1rem;
+    }
+    
+    /* 탭 스타일 개선 */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        height: 3rem;
+        white-space: pre-wrap;
+        background-color: #f0f2f6;
+        border-radius: 0.5rem;
+        color: #333;
+        font-weight: bold;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: #667eea;
+        color: white;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -84,11 +123,8 @@ class WeatherData:
     weather_description: str
     wind_speed: float
     visibility: float
-    sunrise: datetime.datetime = None
-    sunset: datetime.datetime = None
-    timezone_offset: int = 0  # UTC 기준 오프셋 (초)
+    uv_index: Optional[float] = None
     timestamp: datetime.datetime = None
-    source: str = "데모 데이터"
 
 class WeatherApp:
     """스마트 출퇴근 도우미 메인 클래스"""
@@ -100,38 +136,14 @@ class WeatherApp:
             "feels_like": 24,
             "humidity": 65,
             "weather": "Clear",
-            "description": "맑음 (데모 데이터)",
+            "description": "맑음",
             "wind_speed": 3.2
-        }
-        
-        # 주요 도시별 시간대 매핑
-        self.city_timezones = {
-            'Seoul': 'Asia/Seoul',
-            'Busan': 'Asia/Seoul',
-            'Incheon': 'Asia/Seoul',
-            'Daegu': 'Asia/Seoul',
-            'Daejeon': 'Asia/Seoul',
-            'Gwangju': 'Asia/Seoul',
-            'Tokyo': 'Asia/Tokyo',
-            'Osaka': 'Asia/Tokyo',
-            'Beijing': 'Asia/Shanghai',
-            'Shanghai': 'Asia/Shanghai',
-            'New York': 'America/New_York',
-            'London': 'Europe/London',
-            'Paris': 'Europe/Paris',
-            'Sydney': 'Australia/Sydney',
-            'Los Angeles': 'America/Los_Angeles',
-            'Bangkok': 'Asia/Bangkok',
-            'Singapore': 'Asia/Singapore',
-            'Hong Kong': 'Asia/Hong_Kong',
-            'Mumbai': 'Asia/Kolkata',
-            'Dubai': 'Asia/Dubai'
         }
 
     def get_api_key(self) -> str:
-        """API 키 가져오기"""
+        """API 키 가져오기 (Streamlit Secrets 사용)"""
         try:
-            return st.secrets.get("OPENWEATHER_API_KEY", "")
+            return st.secrets["OPENWEATHER_API_KEY"]
         except:
             return st.session_state.get("api_key", "")
 
@@ -154,38 +166,11 @@ class WeatherApp:
                 return icon
         return '🌤️'
 
-    def get_city_local_time(self, city: str, timezone_offset: int = None) -> tuple:
-        """도시의 현지 시간 반환"""
-        try:
-            # 시간대 매핑에서 찾기
-            timezone_name = self.city_timezones.get(city)
-            
-            if timezone_name:
-                # pytz를 사용한 정확한 시간대
-                tz = pytz.timezone(timezone_name)
-                local_time = datetime.datetime.now(tz)
-            elif timezone_offset:
-                # API에서 받은 오프셋 사용
-                offset_hours = timezone_offset / 3600
-                tz = pytz.FixedOffset(int(offset_hours * 60))
-                local_time = datetime.datetime.now(tz)
-            else:
-                # 기본값: UTC
-                local_time = datetime.datetime.utcnow()
-                timezone_name = "UTC"
-            
-            return local_time, timezone_name
-            
-        except Exception as e:
-            # 오류 시 서울 시간 반환
-            seoul_tz = pytz.timezone('Asia/Seoul')
-            return datetime.datetime.now(seoul_tz), 'Asia/Seoul'
-
-    @st.cache_data(ttl=300)  # 5분 캐시
+    @st.cache_data(ttl=600)  # 10분 캐시
     def fetch_weather_data(_self, city: str) -> Optional[WeatherData]:
-        """날씨 데이터 가져오기"""
+        """OpenWeatherMap API에서 날씨 데이터 가져오기 (캐시 적용)"""
         if not _self.api_key:
-            return _self._get_backup_weather_data(city)
+            return _self._get_backup_weather_data()
             
         try:
             url = "https://api.openweathermap.org/data/2.5/weather"
@@ -200,10 +185,6 @@ class WeatherApp:
             response.raise_for_status()
             data = response.json()
             
-            # 일출/일몰 시간 변환 (Unix timestamp → datetime)
-            sunrise = datetime.datetime.fromtimestamp(data['sys']['sunrise'])
-            sunset = datetime.datetime.fromtimestamp(data['sys']['sunset'])
-            
             return WeatherData(
                 temperature=data['main']['temp'],
                 feels_like=data['main']['feels_like'],
@@ -213,20 +194,18 @@ class WeatherApp:
                 weather_description=data['weather'][0]['description'],
                 wind_speed=data['wind']['speed'],
                 visibility=data.get('visibility', 10000) / 1000,
-                sunrise=sunrise,
-                sunset=sunset,
-                timezone_offset=data['timezone'],  # UTC 기준 오프셋 (초)
-                timestamp=datetime.datetime.now(),
-                source="OpenWeatherMap API"
+                timestamp=datetime.datetime.now()
             )
             
+        except requests.exceptions.RequestException:
+            st.warning("⚠️ API 호출 실패: 데모 데이터를 사용합니다")
+            return _self._get_backup_weather_data()
         except Exception as e:
-            st.warning(f"⚠️ API 호출 실패: 데모 데이터를 사용합니다")
-            return _self._get_backup_weather_data(city)
+            st.error(f"❌ 오류 발생: {str(e)}")
+            return _self._get_backup_weather_data()
 
-    def _get_backup_weather_data(self, city: str) -> WeatherData:
+    def _get_backup_weather_data(self) -> WeatherData:
         """백업 날씨 데이터 반환"""
-        now = datetime.datetime.now()
         return WeatherData(
             temperature=self.backup_data['temp'],
             feels_like=self.backup_data['feels_like'],
@@ -236,56 +215,8 @@ class WeatherApp:
             weather_description=self.backup_data['description'],
             wind_speed=self.backup_data['wind_speed'],
             visibility=10.0,
-            sunrise=now.replace(hour=6, minute=30),
-            sunset=now.replace(hour=19, minute=30),
-            timezone_offset=32400,  # KST (+9)
-            timestamp=now,
-            source="데모 데이터"
+            timestamp=datetime.datetime.now()
         )
-
-    def display_weather_info(self, weather: WeatherData, city: str):
-        """날씨 정보 표시"""
-        # 도시 현지 시간 계산
-        local_time, timezone_name = self.get_city_local_time(city, weather.timezone_offset)
-        
-        # 현지 시간 표시
-        st.markdown(f"""
-        <div style='text-align: center; color: #666; margin-bottom: 1rem;'>
-            📍 <strong>{city}</strong> 현지 시간<br>
-            📅 {local_time.strftime('%Y년 %m월 %d일 (%A)')} {local_time.strftime('%H:%M:%S')}<br>
-            🌐 {timezone_name} | 데이터 출처: {weather.source}
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # 날씨 요약 카드
-        icon = self.get_weather_icon(weather.weather_condition)
-        
-        st.markdown(f"""
-        <div class="weather-card">
-            <div style="font-size: 3rem;">{icon}</div>
-            <div style="font-size: 3rem; font-weight: bold; margin: 0.5rem 0;">{weather.temperature:.1f}°C</div>
-            <div style="font-size: 1.3rem; margin-bottom: 0.5rem;">{weather.weather_description}</div>
-            <div>체감온도 {weather.feels_like:.1f}°C</div>
-            
-            <div class="time-display">
-                <div style="display: flex; justify-content: space-around; margin-top: 1rem;">
-                    <div>
-                        <div style="font-size: 0.9rem; opacity: 0.8;">🌅 일출</div>
-                        <div style="font-weight: bold;">{weather.sunrise.strftime('%H:%M') if weather.sunrise else '--:--'}</div>
-                    </div>
-                    <div>
-                        <div style="font-size: 0.9rem; opacity: 0.8;">🌇 일몰</div>
-                        <div style="font-weight: bold;">{weather.sunset.strftime('%H:%M') if weather.sunset else '--:--'}</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="data-source">
-                🔄 마지막 업데이트: {weather.timestamp.strftime('%H:%M:%S')}<br>
-                💡 다른 날씨 앱과 1-3°C 차이는 정상입니다
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
 
     def get_outfit_recommendation(self, weather: WeatherData) -> List[str]:
         """옷차림 추천"""
@@ -360,14 +291,10 @@ class WeatherApp:
             
         return recommendations
 
-    def get_departure_time_recommendation(self, weather: WeatherData, city: str) -> List[str]:
-        """출발시간 추천 (현지 시간 기준)"""
+    def get_departure_time_recommendation(self, weather: WeatherData) -> List[str]:
+        """출발시간 추천"""
         recommendations = []
         condition = weather.weather_condition.lower()
-        
-        # 현지 시간 기준으로 출퇴근 시간 판단
-        local_time, _ = self.get_city_local_time(city, weather.timezone_offset)
-        current_hour = local_time.hour
         
         if 'rain' in condition or 'snow' in condition:
             recommendations.extend([
@@ -387,13 +314,12 @@ class WeatherApp:
                 "🌤️ 좋은 날씨로 쾌적한 이동 가능"
             ])
             
-        # 현지 시간 기준 시간대별 조언
+        # 시간대별 추가 조언
+        current_hour = datetime.datetime.now().hour
         if 7 <= current_hour <= 9:
-            recommendations.append(f"🌅 현지 출근시간 ({current_hour}시): 교통량 많으니 여유시간 확보")
+            recommendations.append("🌅 출근시간: 교통량 많으니 여유시간 확보")
         elif 17 <= current_hour <= 19:
-            recommendations.append(f"🌆 현지 퇴근시간 ({current_hour}시): 혼잡 시간대 피하거나 대안 경로 고려")
-        elif 22 <= current_hour or current_hour <= 5:
-            recommendations.append(f"🌙 현지 심야시간 ({current_hour}시): 대중교통 운행 상황 확인 필요")
+            recommendations.append("🌆 퇴근시간: 혼잡 시간대 피하거나 대안 경로 고려")
             
         return recommendations
 
@@ -429,6 +355,40 @@ class WeatherApp:
         
         return advice
 
+    def create_weather_chart(self, weather: WeatherData):
+        """날씨 정보 차트 생성"""
+        # 온도 게이지 차트
+        fig = go.Figure(go.Indicator(
+            mode = "gauge+number+delta",
+            value = weather.temperature,
+            domain = {'x': [0, 1], 'y': [0, 1]},
+            title = {'text': "현재 온도 (°C)"},
+            delta = {'reference': weather.feels_like},
+            gauge = {
+                'axis': {'range': [None, 40]},
+                'bar': {'color': "darkblue"},
+                'steps': [
+                    {'range': [0, 10], 'color': "lightgray"},
+                    {'range': [10, 25], 'color': "yellow"},
+                    {'range': [25, 40], 'color': "red"}
+                ],
+                'threshold': {
+                    'line': {'color': "red", 'width': 4},
+                    'thickness': 0.75,
+                    'value': weather.feels_like
+                }
+            }
+        ))
+        
+        fig.update_layout(
+            height=300,
+            margin=dict(l=20, r=20, t=40, b=20),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)"
+        )
+        
+        return fig
+
 def main():
     """메인 앱 함수"""
     app = WeatherApp()
@@ -437,7 +397,7 @@ def main():
     st.markdown("""
     <div style='text-align: center; margin-bottom: 2rem;'>
         <h1>🌤️ 스마트 출퇴근 도우미</h1>
-        <p style='font-size: 1.2rem; color: #666;'>전 세계 도시별 현지 시간 & 날씨 기반 맞춤 가이드</p>
+        <p style='font-size: 1.2rem; color: #666;'>날씨 기반 맞춤형 출퇴근 가이드</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -445,9 +405,8 @@ def main():
     with st.sidebar:
         st.header("⚙️ 설정")
         
-        if app.api_key:
-            st.success("✅ API 키 설정됨")
-        else:
+        # API 키 입력
+        if not app.api_key:
             st.warning("🔑 API 키가 설정되지 않았습니다")
             api_key_input = st.text_input(
                 "OpenWeatherMap API 키",
@@ -460,60 +419,105 @@ def main():
                 app.api_key = api_key_input
                 st.success("✅ API 키가 설정되었습니다!")
                 st.rerun()
+        else:
+            st.success("✅ API 키 설정됨")
+            
+        # 기타 설정
+        st.subheader("🎨 표시 설정")
+        show_chart = st.checkbox("📊 온도 차트 표시", value=True)
+        auto_refresh = st.checkbox("🔄 자동 새로고침 (30초)", value=False)
         
-        st.subheader("🕐 시간대 정보")
+        st.subheader("📱 앱 정보")
         st.info("""
-        **지원 도시별 현지 시간:**
-        • 🇰🇷 한국: Seoul, Busan, Incheon 등
-        • 🇯🇵 일본: Tokyo, Osaka 
-        • 🇨🇳 중국: Beijing, Shanghai
-        • 🇺🇸 미국: New York, Los Angeles
-        • 🇬🇧 영국: London
-        • 🇫🇷 프랑스: Paris
-        • 기타 전 세계 주요 도시
+        **버전**: 1.0.0  
+        **개발**: Python + Streamlit  
+        **배포**: Streamlit Cloud  
+        **모바일**: 최적화 완료 ✅
         """)
 
     # 메인 컨텐츠
     col1, col2 = st.columns([3, 1])
     
     with col1:
+        # 도시 선택
         cities = [
             "Seoul", "Busan", "Incheon", "Daegu", "Daejeon", "Gwangju",
-            "Tokyo", "Osaka", "Beijing", "Shanghai", "Hong Kong", "Singapore",
-            "New York", "Los Angeles", "London", "Paris", "Sydney", "Dubai"
+            "Tokyo", "Osaka", "Beijing", "Shanghai", "New York", "London", "Paris"
         ]
         
         selected_city = st.selectbox(
             "🏙️ 도시를 선택하세요",
             cities,
             index=0,
-            help="선택한 도시의 현지 시간과 날씨를 표시합니다"
+            help="전 세계 주요 도시의 날씨를 확인할 수 있습니다"
         )
     
     with col2:
+        # 새로고침 버튼
         if st.button("🔄 새로고침", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
     
     # 날씨 정보 가져오기
-    with st.spinner(f"🌤️ {selected_city}의 날씨 정보를 가져오는 중..."):
+    with st.spinner("🌤️ 날씨 정보를 가져오는 중..."):
         weather_data = app.fetch_weather_data(selected_city)
     
     if weather_data:
-        # 날씨 정보 표시 (현지 시간 포함)
-        app.display_weather_info(weather_data, selected_city)
+        # 현재 시간 표시
+        st.markdown(f"""
+        <div style='text-align: center; color: #666; margin-bottom: 1rem;'>
+            📅 {datetime.datetime.now().strftime('%Y년 %m월 %d일 %H:%M:%S')} 기준
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 날씨 요약 카드
+        icon = app.get_weather_icon(weather_data.weather_condition)
+        
+        st.markdown(f"""
+        <div class="weather-card">
+            <div class="big-emoji">{icon}</div>
+            <div class="temperature">{weather_data.temperature:.1f}°C</div>
+            <div style="font-size: 1.3rem; margin-bottom: 0.5rem;">{weather_data.weather_description}</div>
+            <div>체감온도 {weather_data.feels_like:.1f}°C</div>
+        </div>
+        """, unsafe_allow_html=True)
         
         # 상세 날씨 정보
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric("💧 습도", f"{weather_data.humidity}%")
+            st.metric(
+                label="💧 습도",
+                value=f"{weather_data.humidity}%",
+                delta=None
+            )
+            
         with col2:
-            st.metric("💨 바람", f"{weather_data.wind_speed:.1f}m/s")
+            st.metric(
+                label="💨 바람",
+                value=f"{weather_data.wind_speed:.1f}m/s",
+                delta=None
+            )
+            
         with col3:
-            st.metric("👁️ 가시거리", f"{weather_data.visibility:.1f}km")
+            st.metric(
+                label="👁️ 가시거리",
+                value=f"{weather_data.visibility:.1f}km",
+                delta=None
+            )
+            
         with col4:
-            st.metric("🌡️ 기압", f"{weather_data.pressure}hPa")
+            st.metric(
+                label="🌡️ 기압",
+                value=f"{weather_data.pressure}hPa",
+                delta=None
+            )
+        
+        # 온도 차트 (선택사항)
+        if show_chart:
+            st.subheader("📊 온도 정보")
+            chart = app.create_weather_chart(weather_data)
+            st.plotly_chart(chart, use_container_width=True)
         
         # 추천사항 탭
         st.subheader("💡 스마트 추천")
@@ -547,7 +551,7 @@ def main():
         
         with tab3:
             st.markdown("### ⏰ 출발시간 가이드")
-            time_recs = app.get_departure_time_recommendation(weather_data, selected_city)
+            time_recs = app.get_departure_time_recommendation(weather_data)
             for i, rec in enumerate(time_recs, 1):
                 st.markdown(f"""
                 <div class="recommendation-card">
@@ -564,6 +568,62 @@ def main():
                     <strong>{i}.</strong> {rec}
                 </div>
                 """, unsafe_allow_html=True)
+        
+        # 날씨 상태에 따른 전체 평가
+        st.subheader("🎯 오늘의 출퇴근 평가")
+        
+        # 점수 계산 로직
+        score = 100
+        status_class = "status-good"
+        status_text = "최적"
+        
+        if 'rain' in weather_data.weather_condition.lower():
+            score -= 30
+            status_class = "status-warning"
+            status_text = "주의"
+        elif 'snow' in weather_data.weather_condition.lower():
+            score -= 40
+            status_class = "status-danger"
+            status_text = "위험"
+        elif weather_data.wind_speed > 15:
+            score -= 20
+            status_class = "status-warning"
+            status_text = "주의"
+            
+        if weather_data.temperature < 0 or weather_data.temperature > 35:
+            score -= 15
+            
+        score = max(score, 0)
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown(f"""
+            <div style='text-align: center; padding: 2rem; background: #f8f9fa; border-radius: 1rem; margin: 1rem 0;'>
+                <div style='font-size: 3rem; margin-bottom: 0.5rem;'>
+                    {'🟢' if score >= 80 else '🟡' if score >= 60 else '🔴'}
+                </div>
+                <div style='font-size: 2rem; font-weight: bold;' class='{status_class}'>
+                    {score}점
+                </div>
+                <div style='font-size: 1.2rem; margin-top: 0.5rem;'>
+                    출퇴근 난이도: <span class='{status_class}'>{status_text}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # 푸터
+    st.markdown("---")
+    st.markdown("""
+    <div style='text-align: center; color: #666; margin-top: 2rem;'>
+        <p>🌤️ 스마트 출퇴근 도우미 | Made with ❤️ by Python & Streamlit</p>
+        <p>📱 모바일 최적화 완료 | 🌍 전 세계 날씨 지원</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # 자동 새로고침
+    if auto_refresh:
+        time.sleep(30)
+        st.rerun()
 
 if __name__ == "__main__":
     main()
