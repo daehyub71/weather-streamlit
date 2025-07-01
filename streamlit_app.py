@@ -1,4 +1,4 @@
-# streamlit_app.py - 도시별 시간 표시 개선 버전
+# streamlit_app.py - HTML 렌더링 문제 수정 버전
 
 import streamlit as st
 import requests
@@ -49,19 +49,13 @@ st.markdown("""
         border-radius: 0.25rem;
     }
     
-    .time-display {
+    .time-info {
         background: rgba(255, 255, 255, 0.1);
         border-radius: 0.5rem;
         padding: 1rem;
         margin: 1rem 0;
         text-align: center;
-    }
-    
-    .data-source {
-        font-size: 0.9rem;
-        opacity: 0.8;
-        margin-top: 1rem;
-        text-align: center;
+        color: white;
     }
     
     .stButton > button {
@@ -244,48 +238,44 @@ class WeatherApp:
         )
 
     def display_weather_info(self, weather: WeatherData, city: str):
-        """날씨 정보 표시"""
+        """날씨 정보 표시 - 단순화된 버전"""
         # 도시 현지 시간 계산
         local_time, timezone_name = self.get_city_local_time(city, weather.timezone_offset)
         
-        # 현지 시간 표시
-        st.markdown(f"""
-        <div style='text-align: center; color: #666; margin-bottom: 1rem;'>
-            📍 <strong>{city}</strong> 현지 시간<br>
-            📅 {local_time.strftime('%Y년 %m월 %d일 (%A)')} {local_time.strftime('%H:%M:%S')}<br>
-            🌐 {timezone_name} | 데이터 출처: {weather.source}
-        </div>
-        """, unsafe_allow_html=True)
+        # 현지 시간 정보
+        st.markdown(f"### 📍 {city} 현지 시간")
+        st.write(f"📅 **{local_time.strftime('%Y년 %m월 %d일 (%A)')}**")
+        st.write(f"🕐 **{local_time.strftime('%H:%M:%S')}**")
+        st.write(f"🌐 시간대: {timezone_name}")
+        st.write(f"📊 데이터 출처: {weather.source}")
         
-        # 날씨 요약 카드
+        # 날씨 정보 카드
         icon = self.get_weather_icon(weather.weather_condition)
         
-        st.markdown(f"""
-        <div class="weather-card">
-            <div style="font-size: 3rem;">{icon}</div>
-            <div style="font-size: 3rem; font-weight: bold; margin: 0.5rem 0;">{weather.temperature:.1f}°C</div>
-            <div style="font-size: 1.3rem; margin-bottom: 0.5rem;">{weather.weather_description}</div>
-            <div>체감온도 {weather.feels_like:.1f}°C</div>
-            
-            <div class="time-display">
-                <div style="display: flex; justify-content: space-around; margin-top: 1rem;">
-                    <div>
-                        <div style="font-size: 0.9rem; opacity: 0.8;">🌅 일출</div>
-                        <div style="font-weight: bold;">{weather.sunrise.strftime('%H:%M') if weather.sunrise else '--:--'}</div>
-                    </div>
-                    <div>
-                        <div style="font-size: 0.9rem; opacity: 0.8;">🌇 일몰</div>
-                        <div style="font-weight: bold;">{weather.sunset.strftime('%H:%M') if weather.sunset else '--:--'}</div>
-                    </div>
-                </div>
+        # 메인 날씨 정보
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown(f"""
+            <div class="weather-card">
+                <div style="font-size: 4rem; margin-bottom: 1rem;">{icon}</div>
+                <div style="font-size: 3rem; font-weight: bold; margin-bottom: 1rem;">{weather.temperature:.1f}°C</div>
+                <div style="font-size: 1.5rem; margin-bottom: 1rem;">{weather.weather_description}</div>
+                <div style="font-size: 1.2rem;">체감온도 {weather.feels_like:.1f}°C</div>
             </div>
-            
-            <div class="data-source">
-                🔄 마지막 업데이트: {weather.timestamp.strftime('%H:%M:%S')}<br>
-                💡 다른 날씨 앱과 1-3°C 차이는 정상입니다
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+        
+        # 일출/일몰 정보
+        if weather.sunrise and weather.sunset:
+            st.markdown("### 🌅 일출/일몰 시간")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("🌅 일출", weather.sunrise.strftime('%H:%M'))
+            with col2:
+                st.metric("🌇 일몰", weather.sunset.strftime('%H:%M'))
+        
+        # 업데이트 시간
+        st.caption(f"🔄 마지막 업데이트: {weather.timestamp.strftime('%H:%M:%S')}")
+        st.caption("💡 다른 날씨 앱과 1-3°C 차이는 정상입니다")
 
     def get_outfit_recommendation(self, weather: WeatherData) -> List[str]:
         """옷차림 추천"""
@@ -434,12 +424,9 @@ def main():
     app = WeatherApp()
     
     # 헤더
-    st.markdown("""
-    <div style='text-align: center; margin-bottom: 2rem;'>
-        <h1>🌤️ 스마트 출퇴근 도우미</h1>
-        <p style='font-size: 1.2rem; color: #666;'>전 세계 도시별 현지 시간 & 날씨 기반 맞춤 가이드</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.title("🌤️ 스마트 출퇴근 도우미")
+    st.markdown("**전 세계 도시별 현지 시간 & 날씨 기반 맞춤 가이드**")
+    st.divider()
     
     # API 키 설정 (사이드바)
     with st.sidebar:
@@ -503,7 +490,10 @@ def main():
         # 날씨 정보 표시 (현지 시간 포함)
         app.display_weather_info(weather_data, selected_city)
         
+        st.divider()
+        
         # 상세 날씨 정보
+        st.subheader("📊 상세 날씨 정보")
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
@@ -514,6 +504,8 @@ def main():
             st.metric("👁️ 가시거리", f"{weather_data.visibility:.1f}km")
         with col4:
             st.metric("🌡️ 기압", f"{weather_data.pressure}hPa")
+        
+        st.divider()
         
         # 추천사항 탭
         st.subheader("💡 스마트 추천")
@@ -526,44 +518,28 @@ def main():
         ])
         
         with tab1:
-            st.markdown("### 👔 오늘의 복장 추천")
+            st.markdown("**👔 오늘의 복장 추천**")
             outfit_recs = app.get_outfit_recommendation(weather_data)
             for i, rec in enumerate(outfit_recs, 1):
-                st.markdown(f"""
-                <div class="recommendation-card">
-                    <strong>{i}.</strong> {rec}
-                </div>
-                """, unsafe_allow_html=True)
+                st.write(f"{i}. {rec}")
         
         with tab2:
-            st.markdown("### 🚇 교통수단 추천")
+            st.markdown("**🚇 교통수단 추천**")
             transport_recs = app.get_transport_recommendation(weather_data)
             for i, rec in enumerate(transport_recs, 1):
-                st.markdown(f"""
-                <div class="recommendation-card">
-                    <strong>{i}.</strong> {rec}
-                </div>
-                """, unsafe_allow_html=True)
+                st.write(f"{i}. {rec}")
         
         with tab3:
-            st.markdown("### ⏰ 출발시간 가이드")
+            st.markdown("**⏰ 출발시간 가이드**")
             time_recs = app.get_departure_time_recommendation(weather_data, selected_city)
             for i, rec in enumerate(time_recs, 1):
-                st.markdown(f"""
-                <div class="recommendation-card">
-                    <strong>{i}.</strong> {rec}
-                </div>
-                """, unsafe_allow_html=True)
+                st.write(f"{i}. {rec}")
         
         with tab4:
-            st.markdown("### 💊 건강 관리 조언")
+            st.markdown("**💊 건강 관리 조언**")
             health_recs = app.get_health_advice(weather_data)
             for i, rec in enumerate(health_recs, 1):
-                st.markdown(f"""
-                <div class="recommendation-card">
-                    <strong>{i}.</strong> {rec}
-                </div>
-                """, unsafe_allow_html=True)
+                st.write(f"{i}. {rec}")
 
 if __name__ == "__main__":
     main()
