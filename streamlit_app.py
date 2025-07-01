@@ -123,11 +123,15 @@ class WeatherApp:
         }
 
     def get_api_key(self) -> str:
-        """API 키 가져오기"""
+        """API 키 가져오기 - session_state 우선"""
+        # session_state 우선 확인 (사용자 입력)
+        if "api_key" in st.session_state and st.session_state.api_key:
+            return st.session_state.api_key
+        # secrets 확인 (배포 환경)
         try:
             return st.secrets.get("OPENWEATHER_API_KEY", "")
         except:
-            return st.session_state.get("api_key", "")
+            return ""
 
     def get_weather_icon(self, condition: str) -> str:
         """날씨 조건에 따른 이모지 아이콘 반환"""
@@ -250,7 +254,12 @@ class WeatherApp:
         st.write(f"📅 **{local_time.strftime('%Y년 %m월 %d일 (%A)')}**")
         st.write(f"🕐 **{local_time.strftime('%H:%M:%S')}**")
         st.write(f"🌐 시간대: {timezone_name}")
-        st.write(f"📊 데이터 출처: {weather.source}")
+        
+        # 데이터 출처 강조 표시
+        if weather.source == "데모 데이터":
+            st.error(f"⚠️ **데이터 출처: {weather.source}** - API 키를 확인하세요!")
+        else:
+            st.success(f"✅ **데이터 출처: {weather.source}**")
         
         # 날씨 정보 카드
         icon = self.get_weather_icon(weather.weather_condition)
@@ -435,8 +444,18 @@ def main():
     with st.sidebar:
         st.header("⚙️ 설정")
         
-        if app.api_key:
+        # 실시간 API 키 상태 확인
+        current_api_key = app.get_api_key()
+        
+        if current_api_key:
             st.success("✅ API 키 설정됨")
+            st.info(f"🔑 API 키 길이: {len(current_api_key)}자")
+            # API 키 삭제 버튼 추가
+            if st.button("🗑️ API 키 삭제"):
+                if "api_key" in st.session_state:
+                    del st.session_state.api_key
+                st.cache_data.clear()
+                st.rerun()
         else:
             st.warning("🔑 API 키가 설정되지 않았습니다")
             api_key_input = st.text_input(
@@ -447,7 +466,6 @@ def main():
             
             if api_key_input:
                 st.session_state.api_key = api_key_input
-                app.api_key = api_key_input
                 # API 키 변경 시 캐시 클리어
                 st.cache_data.clear()
                 st.success("✅ API 키가 설정되었습니다!")
@@ -489,7 +507,9 @@ def main():
     
     # 날씨 정보 가져오기
     with st.spinner(f"🌤️ {selected_city}의 날씨 정보를 가져오는 중..."):
-        weather_data = app.fetch_weather_data(selected_city, app.api_key)
+        # 실시간으로 API 키 확인
+        current_api_key = app.get_api_key()
+        weather_data = app.fetch_weather_data(selected_city, current_api_key)
     
     if weather_data:
         # 날씨 정보 표시 (현지 시간 포함)
