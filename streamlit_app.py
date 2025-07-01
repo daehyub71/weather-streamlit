@@ -176,16 +176,19 @@ class WeatherApp:
             return datetime.datetime.now(seoul_tz), 'Asia/Seoul'
 
     @st.cache_data(ttl=300)  # 5분 캐시
-    def fetch_weather_data(_self, city: str) -> Optional[WeatherData]:
+    def fetch_weather_data(_self, city: str, api_key: str = None) -> Optional[WeatherData]:
         """날씨 데이터 가져오기"""
-        if not _self.api_key:
+        # API 키 우선순위: 매개변수 > 인스턴스 변수
+        current_api_key = api_key or _self.api_key
+        
+        if not current_api_key:
             return _self._get_backup_weather_data(city)
             
         try:
             url = "https://api.openweathermap.org/data/2.5/weather"
             params = {
                 'q': city,
-                'appid': _self.api_key,
+                'appid': current_api_key,
                 'units': 'metric',
                 'lang': 'kr'
             }
@@ -445,6 +448,8 @@ def main():
             if api_key_input:
                 st.session_state.api_key = api_key_input
                 app.api_key = api_key_input
+                # API 키 변경 시 캐시 클리어
+                st.cache_data.clear()
                 st.success("✅ API 키가 설정되었습니다!")
                 st.rerun()
         
@@ -484,7 +489,7 @@ def main():
     
     # 날씨 정보 가져오기
     with st.spinner(f"🌤️ {selected_city}의 날씨 정보를 가져오는 중..."):
-        weather_data = app.fetch_weather_data(selected_city)
+        weather_data = app.fetch_weather_data(selected_city, app.api_key)
     
     if weather_data:
         # 날씨 정보 표시 (현지 시간 포함)
