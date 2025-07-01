@@ -201,9 +201,16 @@ class WeatherApp:
             response.raise_for_status()
             data = response.json()
             
-            # 일출/일몰 시간 변환 (Unix timestamp → datetime)
-            sunrise = datetime.datetime.fromtimestamp(data['sys']['sunrise'])
-            sunset = datetime.datetime.fromtimestamp(data['sys']['sunset'])
+            # 일출/일몰 시간 변환 (Unix timestamp → 현지 시간으로 변환)
+            timezone_offset_hours = data['timezone'] / 3600
+            
+            sunrise_utc = datetime.datetime.fromtimestamp(data['sys']['sunrise'], tz=datetime.timezone.utc)
+            sunset_utc = datetime.datetime.fromtimestamp(data['sys']['sunset'], tz=datetime.timezone.utc)
+            
+            # 현지 시간대로 변환
+            local_tz = datetime.timezone(datetime.timedelta(hours=timezone_offset_hours))
+            sunrise_local = sunrise_utc.astimezone(local_tz)
+            sunset_local = sunset_utc.astimezone(local_tz)
             
             return WeatherData(
                 temperature=data['main']['temp'],
@@ -214,8 +221,8 @@ class WeatherApp:
                 weather_description=data['weather'][0]['description'],
                 wind_speed=data['wind']['speed'],
                 visibility=data.get('visibility', 10000) / 1000,
-                sunrise=sunrise,
-                sunset=sunset,
+                sunrise=sunrise_local,
+                sunset=sunset_local,
                 timezone_offset=data['timezone'],  # UTC 기준 오프셋 (초)
                 timestamp=datetime.datetime.now(),
                 source="OpenWeatherMap API"
@@ -227,7 +234,13 @@ class WeatherApp:
 
     def _get_backup_weather_data(self, city: str) -> WeatherData:
         """백업 날씨 데이터 반환"""
-        now = datetime.datetime.now()
+        # 현지 시간 기준으로 일출/일몰 설정
+        local_time, _ = self.get_city_local_time(city)
+        
+        # 계절에 맞는 일출/일몰 시간 (7월 기준)
+        sunrise_time = local_time.replace(hour=6, minute=0, second=0, microsecond=0)
+        sunset_time = local_time.replace(hour=19, minute=30, second=0, microsecond=0)
+        
         return WeatherData(
             temperature=self.backup_data['temp'],
             feels_like=self.backup_data['feels_like'],
@@ -237,10 +250,10 @@ class WeatherApp:
             weather_description=self.backup_data['description'],
             wind_speed=self.backup_data['wind_speed'],
             visibility=10.0,
-            sunrise=now.replace(hour=6, minute=30),
-            sunset=now.replace(hour=19, minute=30),
+            sunrise=sunrise_time,
+            sunset=sunset_time,
             timezone_offset=32400,  # KST (+9)
-            timestamp=now,
+            timestamp=local_time,
             source="데모 데이터"
         )
 
@@ -290,144 +303,363 @@ class WeatherApp:
         st.caption("💡 다른 날씨 앱과 1-3°C 차이는 정상입니다")
 
     def get_outfit_recommendation(self, weather: WeatherData) -> List[str]:
-        """옷차림 추천"""
+        """개선된 옷차림 추천 - 실제 기상 데이터 기반"""
         recommendations = []
         temp = weather.temperature
+        feels_like = weather.feels_like
+        humidity = weather.humidity
+        wind_speed = weather.wind_speed
         condition = weather.weather_condition.lower()
         
-        if temp < 0:
+        # 체감온도 기준 기본 복장
+        effective_temp = feels_like if abs(feels_like - temp) > 2 else temp
+        
+        if effective_temp < -10:
             recommendations.extend([
-                "🧥 패딩이나 두꺼운 코트 필수",
-                "🧤 장갑과 목도리 착용",
-                "👢 따뜻한 신발 선택",
-                "🔥 핫팩 준비하세요"
+                "🧥 두꺼운 패딩 또는 겨울 코트 필수",
+                "🧤 방한장갑, 목도리, 털모자 착용",
+                "👢 방수 겨울부츠, 미끄럼방지 밑창",
+                "🔥 핫팩 여러 개 준비 (손, 발, 몸통용)"
             ])
-        elif temp < 10:
+        elif effective_temp < 0:
             recommendations.extend([
-                "🧥 두꺼운 외투 착용",
-                "👖 긴바지와 긴팔 필수",
-                "🧣 목도리 준비"
+                "🧥 패딩 재킷 또는 울코트",
+                "🧤 장갑과 목도리 필수",
+                "👢 따뜻한 부츠 착용"
             ])
-        elif temp < 20:
+        elif effective_temp < 10:
             recommendations.extend([
-                "👔 가디건이나 얇은 자켓",
-                "👖 긴바지 추천",
-                "👕 긴팔 셔츠"
+                "🧥 두꺼운 자켓 또는 코트",
+                "👕 니트나 긴팔 셔츠 + 카디건",
+                "👖 긴바지, 두꺼운 양말"
             ])
-        elif temp < 25:
+        elif effective_temp < 15:
             recommendations.extend([
-                "👕 가벼운 긴팔이나 반팔",
-                "👖 긴바지 또는 7부바지",
-                "🧥 얇은 겉옷 준비"
+                "👔 얇은 자켓 또는 가디건",
+                "👕 긴팔 셔츠 또는 얇은 니트",
+                "👖 긴바지 추천"
+            ])
+        elif effective_temp < 20:
+            recommendations.extend([
+                "👕 긴팔 또는 얇은 가디건",
+                "👖 긴바지 또는 면바지",
+                "🧥 얇은 겉옷 가져가기"
+            ])
+        elif effective_temp < 25:
+            recommendations.extend([
+                "👕 반팔 또는 얇은 긴팔",
+                "👖 면바지 또는 7부바지",
+                "🧥 가벼운 겉옷 준비"
             ])
         else:
             recommendations.extend([
-                "👕 반팔과 반바지",
-                "🕶️ 선글라스 준비",
-                "🧴 선크림 필수"
+                "👕 반팔, 민소매 또는 통풍 잘 되는 옷",
+                "🩳 반바지 또는 치마",
+                "🕶️ 선글라스, 모자 준비",
+                "🧴 선크림 SPF 30+ 필수"
             ])
-            
-        if 'rain' in condition:
-            recommendations.append("☔ 우산이나 우비 필수")
-        if 'snow' in condition:
-            recommendations.append("❄️ 미끄럼 방지 신발 착용")
-            
+        
+        # 날씨별 추가 권장사항
+        if 'rain' in condition or 'drizzle' in condition:
+            recommendations.extend([
+                "☔ 우산 또는 방수 우비 필수",
+                "👢 방수 신발 착용",
+                "🎒 방수 가방 또는 가방 커버"
+            ])
+        elif 'thunderstorm' in condition:
+            recommendations.extend([
+                "⛈️ 완전 방수 의류 필수",
+                "🏠 가능하면 실내 대기 권장"
+            ])
+        elif 'snow' in condition:
+            recommendations.extend([
+                "❄️ 미끄럼방지 신발 필수",
+                "🧥 방수 외투 착용",
+                "🧤 방수 장갑 권장"
+            ])
+        
+        # 습도별 조언
+        if humidity > 80:
+            recommendations.append("💨 통풍 잘 되는 소재 선택 (면, 리넨)")
+        elif humidity < 30:
+            recommendations.append("💧 보습 로션 사용, 립밤 준비")
+        
+        # 바람별 조언
+        if wind_speed > 10:
+            recommendations.append("💨 바람막이 재킷 또는 윈드브레이커 추천")
+        
         return recommendations
 
     def get_transport_recommendation(self, weather: WeatherData) -> List[str]:
-        """교통수단 추천"""
+        """개선된 교통수단 추천 - 종합적 기상 조건 분석"""
         recommendations = []
         condition = weather.weather_condition.lower()
         wind_speed = weather.wind_speed
+        visibility = weather.visibility
+        temp = weather.temperature
+        humidity = weather.humidity
         
-        if 'rain' in condition or 'snow' in condition:
+        # 기상 위험도 계산
+        risk_score = 0
+        
+        if 'rain' in condition or 'drizzle' in condition:
+            risk_score += 3
+        elif 'thunderstorm' in condition:
+            risk_score += 5
+        elif 'snow' in condition:
+            risk_score += 4
+        elif 'fog' in condition or 'mist' in condition:
+            risk_score += 2
+        
+        if wind_speed > 15:
+            risk_score += 3
+        elif wind_speed > 10:
+            risk_score += 1
+            
+        if visibility < 5:
+            risk_score += 2
+        elif visibility < 10:
+            risk_score += 1
+            
+        if temp < -5 or temp > 35:
+            risk_score += 2
+            
+        # 위험도별 교통수단 추천
+        if risk_score >= 7:
             recommendations.extend([
-                "🚇 지하철 이용 강력 추천 (정시성)",
-                "🚌 버스보다는 지하철 우선",
-                "🚗 자차 이용시 안전운전 필수",
-                "🚴‍♂️ 자전거/킥보드 피하기"
+                "🚇 지하철 강력 추천 (가장 안전하고 정시성 우수)",
+                "🏠 가능하면 재택근무 또는 일정 연기 고려",
+                "🚗 자차 이용 시 극도로 주의운전",
+                "🚴‍♂️ 자전거/킥보드/도보 절대 금지"
             ])
-        elif wind_speed > 15:
+        elif risk_score >= 4:
             recommendations.extend([
-                "🚇 지하철 이용 추천",
-                "🚴‍♂️ 자전거/킥보드 이용 주의",
-                "🚗 고속도로 이용시 바람 주의"
+                "🚇 지하철 이용 강력 추천",
+                "🚌 버스 이용 시 배차간격 지연 예상",
+                "🚗 자차 이용 시 안전거리 충분히 확보",
+                "🚴‍♂️ 개인형 이동수단 피하기"
+            ])
+        elif risk_score >= 2:
+            recommendations.extend([
+                "🚇 지하철/🚌 버스 모두 무난",
+                "🚗 자차 이용 시 주의운전",
+                "🚴‍♂️ 자전거/킥보드 신중히 판단",
+                "📱 실시간 교통정보 확인 권장"
             ])
         else:
             recommendations.extend([
-                "🚶‍♂️ 도보나 자전거 이용하기 좋은 날",
-                "🚇 지하철, 🚌 버스 모두 쾌적",
+                "🚶‍♂️ 도보나 자전거로 이동하기 좋은 날",
+                "🚴‍♂️ 킥보드, 자전거 등 친환경 이동수단 추천",
+                "🚇🚌 모든 대중교통 쾌적하게 이용 가능",
                 "🚗 드라이브하기 좋은 날씨"
             ])
+        
+        # 세부 조건별 추가 권장사항
+        if 'rain' in condition:
+            recommendations.append("☔ 대중교통 이용 시 우산 준비, 젖은 신발 주의")
+        if wind_speed > 12:
+            recommendations.append("💨 고층건물 주변 돌풍 주의")
+        if visibility < 5:
+            recommendations.append("👁️ 낮은 가시거리, 차량 전조등 점등 필수")
+        if temp < 0:
+            recommendations.append("🧊 노면 결빙 가능성, 미끄럼 주의")
+        if humidity > 85:
+            recommendations.append("💧 높은 습도로 실내 환기 필요")
             
         return recommendations
 
     def get_departure_time_recommendation(self, weather: WeatherData, city: str) -> List[str]:
-        """출발시간 추천 (현지 시간 기준)"""
+        """개선된 출발시간 추천 - 현지 교통패턴 & 기상조건 분석"""
         recommendations = []
         condition = weather.weather_condition.lower()
+        wind_speed = weather.wind_speed
+        visibility = weather.visibility
         
         # 현지 시간 기준으로 출퇴근 시간 판단
         local_time, _ = self.get_city_local_time(city, weather.timezone_offset)
         current_hour = local_time.hour
+        weekday = local_time.weekday()  # 0=월요일, 6=일요일
         
-        if 'rain' in condition or 'snow' in condition:
+        # 기상 조건에 따른 지연 시간 계산
+        delay_minutes = 0
+        
+        if 'thunderstorm' in condition:
+            delay_minutes += 30
+        elif 'snow' in condition:
+            delay_minutes += 25
+        elif 'rain' in condition or 'drizzle' in condition:
+            delay_minutes += 15
+        elif 'fog' in condition or 'mist' in condition:
+            delay_minutes += 10
+            
+        if wind_speed > 15:
+            delay_minutes += 10
+        elif wind_speed > 10:
+            delay_minutes += 5
+            
+        if visibility < 5:
+            delay_minutes += 15
+        elif visibility < 10:
+            delay_minutes += 5
+        
+        # 주말/평일 구분
+        is_weekend = weekday >= 5
+        
+        if is_weekend:
+            recommendations.append("🎉 주말이므로 교통량이 평일보다 적습니다")
+        
+        # 시간대별 교통 분석 (평일 기준)
+        if not is_weekend:
+            if 6 <= current_hour <= 9:
+                recommendations.append(f"🌅 출근시간대 ({current_hour}시): 교통혼잡 예상")
+                delay_minutes += 10
+            elif 17 <= current_hour <= 20:
+                recommendations.append(f"🌆 퇴근시간대 ({current_hour}시): 극심한 교통혼잡")
+                delay_minutes += 15
+            elif 11 <= current_hour <= 13:
+                recommendations.append(f"🍽️ 점심시간대 ({current_hour}시): 약간의 혼잡")
+                delay_minutes += 5
+            elif 22 <= current_hour or current_hour <= 5:
+                recommendations.append(f"🌙 심야시간 ({current_hour}시): 대중교통 운행 간격 확인")
+                if current_hour >= 23 or current_hour <= 4:
+                    delay_minutes += 20  # 심야 대중교통 대기시간
+        
+        # 최종 출발시간 권장사항
+        if delay_minutes >= 30:
             recommendations.extend([
-                "⏰ 평소보다 15-20분 일찍 출발",
-                "🚇 대중교통 지연 가능성 고려",
-                "📱 실시간 교통정보 확인 필수",
-                "🏠 재택근무 고려해보기"
+                f"⏰ 평소보다 {delay_minutes}분 일찍 출발 권장",
+                "🏠 가능하면 재택근무 또는 일정 조정 고려",
+                "📱 실시간 교통정보 필수 확인",
+                "🚇 대중교통 지연 및 운행 중단 가능성 체크"
             ])
-        elif weather.wind_speed > 10:
+        elif delay_minutes >= 15:
             recommendations.extend([
-                "💨 강풍으로 인한 지연 가능, 10분 일찍 출발",
-                "🚌 버스 배차 간격 늘어날 수 있음"
+                f"⏰ 평소보다 {delay_minutes}분 일찍 출발",
+                "📱 실시간 교통정보 확인 필수",
+                "🚇 대중교통 배차간격 늘어날 수 있음"
+            ])
+        elif delay_minutes >= 5:
+            recommendations.extend([
+                f"⏰ 평소보다 {delay_minutes}분 정도 일찍 출발",
+                "📱 교통정보 한 번 체크해보기"
             ])
         else:
             recommendations.extend([
                 "✅ 평소 시간에 출발해도 충분",
-                "🌤️ 좋은 날씨로 쾌적한 이동 가능"
+                "🌤️ 좋은 날씨로 쾌적한 이동 예상"
             ])
-            
-        # 현지 시간 기준 시간대별 조언
-        if 7 <= current_hour <= 9:
-            recommendations.append(f"🌅 현지 출근시간 ({current_hour}시): 교통량 많으니 여유시간 확보")
-        elif 17 <= current_hour <= 19:
-            recommendations.append(f"🌆 현지 퇴근시간 ({current_hour}시): 혼잡 시간대 피하거나 대안 경로 고려")
-        elif 22 <= current_hour or current_hour <= 5:
-            recommendations.append(f"🌙 현지 심야시간 ({current_hour}시): 대중교통 운행 상황 확인 필요")
-            
+        
+        # 도시별 특수 상황 고려
+        if city in ['Seoul', 'Busan', 'Tokyo']:
+            if delay_minutes > 0:
+                recommendations.append("🚇 지하철망 발달 지역: 지하철 우선 이용 권장")
+        elif city in ['New York', 'London']:
+            if delay_minutes > 10:
+                recommendations.append("🚌 대도시 교통체증: 지하철/버스 혼용 고려")
+        elif city in ['Los Angeles']:
+            if delay_minutes > 0:
+                recommendations.append("🚗 자동차 도시: 고속도로 우회로 검토")
+                
         return recommendations
 
     def get_health_advice(self, weather: WeatherData) -> List[str]:
-        """건강 조언"""
+        """개선된 건강 조언 - 기상의학 기반 종합 분석"""
         advice = []
         temp = weather.temperature
+        feels_like = weather.feels_like
         humidity = weather.humidity
+        pressure = weather.pressure
+        condition = weather.weather_condition.lower()
+        wind_speed = weather.wind_speed
         
-        if temp < 0:
+        # 온도별 건강 관리
+        if temp < -10:
             advice.extend([
-                "🥶 체온 유지 중요, 따뜻한 음료 섭취",
-                "🏠 실내외 온도차 주의",
-                "💊 감기 예방에 신경쓰기"
+                "🥶 체온저하 위험: 따뜻한 음료 자주 섭취",
+                "🫀 심혈관 질환자 외출 시 특별 주의",
+                "🏠 실내외 온도차 20도 이상 시 서서히 적응",
+                "🤧 호흡기 보호: 마스크나 목도리로 찬공기 차단"
+            ])
+        elif temp < 0:
+            advice.extend([
+                "🧊 동상 위험 부위 (손가락, 발가락, 귀) 보온 철저",
+                "💧 실내 건조 주의: 가습기 사용 권장",
+                "🍲 따뜻한 음식으로 체온 유지"
+            ])
+        elif temp > 35:
+            advice.extend([
+                "🌡️ 열사병 주의: 그늘에서 휴식 자주 취하기",
+                "💧 탈수 방지: 30분마다 물 한 컵씩 섭취",
+                "🧂 전해질 보충: 이온음료나 소금 조금 섭취",
+                "❄️ 에어컨 사용 시 실내외 온도차 5-7도 유지"
             ])
         elif temp > 30:
             advice.extend([
-                "💧 충분한 수분 섭취 필수",
+                "💦 충분한 수분 섭취 (하루 2-3L)",
                 "😎 직사광선 피하고 그늘 이용",
-                "🏠 에어컨 사용으로 시원하게"
+                "🍉 수분 많은 과일 섭취 권장"
             ])
-            
-        if humidity > 80:
-            advice.append("💨 높은 습도, 통풍 잘 되는 옷 선택")
+        
+        # 습도별 건강 영향
+        if humidity > 85:
+            advice.extend([
+                "💨 고습도로 인한 답답함: 통풍 자주 시키기",
+                "🦠 세균 번식 주의: 개인위생 철저히",
+                "👕 땀 흡수 잘 되는 면 소재 의류 착용"
+            ])
+        elif humidity > 70:
+            advice.append("🌫️ 높은 습도: 체감온도 상승, 수분 섭취 증가")
         elif humidity < 30:
-            advice.append("💧 건조함, 보습제 사용 및 수분 섭취")
-            
+            advice.extend([
+                "🏜️ 건조 주의: 피부 보습제 수시로 사용",
+                "👃 코 점막 건조 방지: 식염수 스프레이 활용",
+                "💧 가습기 사용 또는 젖은 수건 활용"
+            ])
+        elif humidity < 40:
+            advice.append("🌵 약간 건조: 립밤, 핸드크림 준비")
+        
+        # 기압별 건강 영향
+        if pressure < 1000:
+            advice.extend([
+                "📉 저기압: 관절염/두통 악화 가능",
+                "😴 충분한 수면과 휴식 권장",
+                "🧘‍♀️ 스트레칭이나 가벼운 운동으로 혈액순환 개선"
+            ])
+        elif pressure > 1030:
+            advice.append("📈 고기압: 대체로 몸이 가벼움, 야외활동 좋은 날")
+        
+        # 날씨별 건강 주의사항
+        if 'rain' in condition or 'thunderstorm' in condition:
+            advice.extend([
+                "🌧️ 우울감 주의: 실내 조명 밝게 하기",
+                "☔ 젖은 옷 즉시 갈아입기 (감기 예방)",
+                "🦶 발 습기 제거: 양말 여분 준비"
+            ])
+        
+        if 'snow' in condition:
+            advice.extend([
+                "❄️ 미끄러짐 사고 주의: 보폭 줄이고 천천히 걷기",
+                "👁️ 설맹 주의: 선글라스 착용 권장"
+            ])
+        
+        if wind_speed > 15:
+            advice.extend([
+                "💨 강풍으로 인한 안구건조: 인공눈물 사용",
+                "🌪️ 비산물질 주의: 마스크 착용"
+            ])
+        
+        # 계절별 기본 건강관리
         advice.extend([
-            "😷 마스크 착용으로 미세먼지 차단",
-            "🏃‍♂️ 적절한 운동으로 건강 유지",
-            "🥗 계절에 맞는 음식 섭취"
+            "😷 미세먼지 차단: 보건용 마스크 착용",
+            "🚶‍♂️ 날씨에 맞는 적절한 운동 지속",
+            "🥗 제철 음식과 비타민 섭취로 면역력 강화",
+            "💤 규칙적인 수면 패턴 유지 (7-8시간)"
         ])
+        
+        # 체감온도와 실제온도 차이가 클 때 추가 조언
+        temp_diff = abs(feels_like - temp)
+        if temp_diff > 5:
+            advice.append(f"🌡️ 체감온도({feels_like:.1f}°C)와 실제온도 차이 큼: 체온조절 신경쓰기")
         
         return advice
 
